@@ -20,15 +20,42 @@ def generate_launch_description():
 
     stretch_driver_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([stretch_core_path, '/launch/stretch_driver.launch.py']),
-        launch_arguments={'mode': 'navigation', 'broadcast_odom_tf': 'True'}.items())
+        # The joy stick control in navigation mode is super horrible. Have to switch to joy-stick mode.
+        launch_arguments={'mode': 'gamepad', 'broadcast_odom_tf': 'True'}.items())
 
     d435i_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([stretch_core_path, '/launch/d435i_high_resolution.launch.py']))
 
+    rtabmap_parameters = {
+
+        # There might be a slight performance issue.
+        "wait_for_transform": 0.2,
+
+        # Don't set these to zero. That will cause rtabmap updating too much, which lag out the machine and even cause normal robot state publisher to lag too much 
+        "RGBD/LinearUpdate": '0.05',
+        "RGBD/AngularUpdate": '0.05',
+
+        "RGBD/CreateOccupancyGrid": 'True',
+        # Haven't see other diff robot using this.
+        "Odom/Holonomic": 'False',
+        "Grid/RangeMax": '4.0',
+        
+        # rough value from the stored mode.
+        "Grid/FootprintLength": "0.6",
+        "Grid/FootprintWidth": "0.3",
+        "Grid/FootprintHeight": "0.6",
+
+        "Grid/MaxObstacleHeight": '2.0',
+        "Grid/MaxGroundHeight": '0.01',
+        "Grid/RayTracing": 'True',
+    }
     rtabmap_mapping_node = Node(
         package='rtabmap_slam',
         executable='rtabmap',
         arguments=['-d'],
+        parameters=[
+            rtabmap_parameters,
+        ],
         remappings=[
             ('rgb/image', '/camera/color/image_raw'),
             ('depth/image', '/camera/aligned_depth_to_color/image_raw'),
@@ -37,11 +64,10 @@ def generate_launch_description():
         ],
         output='screen',
         )
-    
     base_teleop_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([stretch_navigation_path, '/launch/teleop_twist.launch.py']),
         launch_arguments={'teleop_type': LaunchConfiguration('teleop_type')}.items())
-    
+
     rviz_launch = Node(package='rviz2', executable='rviz2',
         output='log',
         condition=IfCondition(LaunchConfiguration('use_rviz')),
