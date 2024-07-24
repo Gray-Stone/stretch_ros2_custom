@@ -29,11 +29,11 @@ def generate_launch_description():
     rtabmap_parameters = {
 
         # There might be a slight performance issue.
-        "wait_for_transform": 0.2,
+        # "wait_for_transform": 0.2,
 
         # Don't set these to zero. That will cause rtabmap updating too much, which lag out the machine and even cause normal robot state publisher to lag too much 
         "RGBD/LinearUpdate": '0.05',
-        "RGBD/AngularUpdate": '0.05',
+        "RGBD/AngularUpdate": '0.3',
 
         "RGBD/CreateOccupancyGrid": 'True',
         # Haven't see other diff robot using this.
