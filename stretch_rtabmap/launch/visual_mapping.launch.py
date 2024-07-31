@@ -21,7 +21,8 @@ def generate_launch_description():
     stretch_driver_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([stretch_core_path, '/launch/stretch_driver.launch.py']),
         # The joy stick control in navigation mode is super horrible. Have to switch to joy-stick mode.
-        launch_arguments={'mode': 'gamepad', 'broadcast_odom_tf': 'True'}.items())
+        # launch_arguments={'mode': 'gamepad', 'broadcast_odom_tf': 'True'}.items())
+        launch_arguments={'mode': 'navigation', 'broadcast_odom_tf': 'True'}.items())
 
     d435i_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([stretch_core_path, '/launch/d435i_high_resolution.launch.py']))
