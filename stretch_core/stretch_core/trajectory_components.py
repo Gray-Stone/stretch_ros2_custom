@@ -147,7 +147,7 @@ class BaseComponent(TrajectoryComponent):
         self.trajectory_manager.trajectory.add(t, x[0], x[1], x[2], v[0], v[1], a[0], a[1])
 
 
-def get_trajectory_components(robot):
+def get_trajectory_components(robot)->dict[str,TrajectoryComponent]:
     robot_status = robot.get_status()
     if 'wrist_pitch' in robot_status['end_of_arm']:
         return {component.name: component for component in [HeadPanComponent(robot),

@@ -28,6 +28,8 @@ from .command_groups import HeadPanCommandGroup, HeadTiltCommandGroup, \
 
 import hello_helpers.hello_misc as hm
 
+import stretch_body.lift
+
 class JointTrajectoryAction(Node):
 
     def __init__(self, node, action_server_rate_hz):
@@ -281,14 +283,24 @@ class JointTrajectoryAction(Node):
             duration = max([Duration.from_msg(trajectory.points[-1].time_from_start) for trajectory in trajectories])
             self.node.get_logger().info(f"{self.node.node_name} joint_traj action: new traj with {n_points} points over {round(duration.nanoseconds/1e9, 2)} seconds")
             self.node.robot.stop_trajectory()
+
             for joint in self.joints:
                 self.joints[joint].trajectory_manager.trajectory.clear()
+
+            lift_traj_man :stretch_body.lift.Lift =  self.joints["joint_lift"].trajectory_manager
+            print(f"lift waypoint length {len(lift_traj_man.trajectory.waypoints) }")
+
             for trajectory in trajectories:
                 for joint_index, joint_name in enumerate(trajectory.joint_names):
                     try:
+
+                        print(f"Calling add_waypoints for index {joint_index} => {joint_name}")
+                        print(f"Before, waypoint len { len(self.joints[joint_name].trajectory_manager.trajectory.waypoints) }")
                         self.joints[joint_name].add_waypoints(trajectory.points, joint_index)
+                        print(f"After, waypoint len {len(self.joints[joint_name].trajectory_manager.trajectory.waypoints)} ")
                     except KeyError as e:
                         return self.error_callback(goal_handle, FollowJointTrajectory.Result.INVALID_GOAL, str(e))
+            
             if not self.node.robot.follow_trajectory():
                 self.node.robot.stop_trajectory()
                 return self.error_callback(goal_handle, -100, 'hardware failed to start trajectory')
@@ -307,6 +319,9 @@ class JointTrajectoryAction(Node):
 
                 self._update_trajectory_dynamixel()
                 self._update_trajectory_non_dynamixel()
+
+                print(f"lift motor status waypoint state {lift_traj_man.motor.status['waypoint_traj']['state']}")
+
                 self.feedback_callback(goal_handle, start_time=ts)
                 # self.action_server_rate.sleep()
 
