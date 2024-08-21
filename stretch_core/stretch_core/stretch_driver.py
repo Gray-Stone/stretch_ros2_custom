@@ -897,6 +897,7 @@ class StretchDriver(Node):
         self.gamepad_state_pub = self.create_publisher(Joy,'stretch_gamepad_state', 1) # decode using gamepad_conversion.unpack_joy_to_gamepad_state() on client side
 
         self.group = MutuallyExclusiveCallbackGroup()
+        self.mode_swtich_group = MutuallyExclusiveCallbackGroup()
         self.create_subscription(Twist, "cmd_vel", self.set_mobile_base_velocity_callback, 1, callback_group=self.group)
         
         self.create_subscription(Joy, "gamepad_joy", self.set_gamepad_motion_callback, 1, callback_group=self.group)
@@ -943,19 +944,19 @@ class StretchDriver(Node):
 
         self.switch_to_navigation_mode_service = self.create_service(Trigger,
                                                                      '/switch_to_navigation_mode',
-                                                                     self.navigation_mode_service_callback)
+                                                                     self.navigation_mode_service_callback , callback_group= self.mode_swtich_group)
 
         self.switch_to_position_mode_service = self.create_service(Trigger,
                                                                    '/switch_to_position_mode',
-                                                                   self.position_mode_service_callback)
+                                                                   self.position_mode_service_callback , callback_group= self.mode_swtich_group)
 
         self.switch_to_trajectory_mode_service = self.create_service(Trigger,
                                                                        '/switch_to_trajectory_mode',
-                                                                       self.trajectory_mode_service_callback)
+                                                                       self.trajectory_mode_service_callback , callback_group= self.mode_swtich_group)
 
         self.switch_to_gamepad_mode_service = self.create_service(Trigger,
                                                                     '/switch_to_gamepad_mode',
-                                                                    self.gamepad_mode_service_callback)
+                                                                    self.gamepad_mode_service_callback , callback_group= self.mode_swtich_group)
 
         self.stop_the_robot_service = self.create_service(Trigger,
                                                           '/stop_the_robot',
@@ -963,7 +964,7 @@ class StretchDriver(Node):
 
         self.home_the_robot_service = self.create_service(Trigger,
                                                           '/home_the_robot',
-                                                          self.home_the_robot_callback)
+                                                          self.home_the_robot_callback,callback_group= self.mode_swtich_group)
 
         self.stow_the_robot_service = self.create_service(Trigger,
                                                            '/stow_the_robot',
@@ -990,7 +991,7 @@ class StretchDriver(Node):
 def main():
     try:
         rclpy.init()
-        executor = MultiThreadedExecutor(num_threads=5)
+        executor = MultiThreadedExecutor(num_threads=20)
         node = StretchDriver()
         node.joint_trajectory_action = JointTrajectoryAction(node, node.action_server_rate)
         executor.add_node(node)
