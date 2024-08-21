@@ -27,7 +27,7 @@ from .command_groups import HeadPanCommandGroup, HeadTiltCommandGroup, \
                            MobileBaseCommandGroup
 
 import hello_helpers.hello_misc as hm
-import stretch_body.lift
+import stretch_body.lift , stretch_body.arm , stretch_body.base
 
 class JointTrajectoryAction(Node):
 
@@ -292,7 +292,19 @@ class JointTrajectoryAction(Node):
                 self.joints[joint].trajectory_manager.trajectory.clear()
 
             lift_traj_man :stretch_body.lift.Lift =  self.joints["joint_lift"].trajectory_manager
+            arm_traj_man :stretch_body.arm.Arm =  self.joints["wrist_extension"].trajectory_manager
+            base_traj_man:stretch_body.base.Base =self.joints["position"].trajectory_manager
             print(f"lift waypoint length {len(lift_traj_man.trajectory.waypoints) }")
+            print(f"base wheel traj state {base_traj_man.right_wheel.status['waypoint_traj']['state'] }")
+
+
+            self.node.robot.follow_trajectory()
+            print(f"re-updating to clear stuff")
+            self._update_trajectory_non_dynamixel()
+            print(f"Done reupdating")
+            print(f"base wheel traj state {base_traj_man.right_wheel.status['waypoint_traj']['state'] }")
+
+
 
             for trajectory in trajectories:
                 for joint_index, joint_name in enumerate(trajectory.joint_names):
@@ -302,9 +314,10 @@ class JointTrajectoryAction(Node):
                         print(f"Before, waypoint len { len(self.joints[joint_name].trajectory_manager.trajectory.waypoints) }")
                         self.joints[joint_name].add_waypoints(trajectory.points, joint_index)
                         print(f"After, waypoint len {len(self.joints[joint_name].trajectory_manager.trajectory.waypoints)} ")
+                        print(f"Waypoints { self.joints[joint_name].trajectory_manager.trajectory.waypoints}")
                     except KeyError as e:
                         return self.error_callback(goal_handle, FollowJointTrajectory.Result.INVALID_GOAL, str(e))
-            
+
             if not self.node.robot.follow_trajectory():
                 self.node.robot.stop_trajectory()
                 return self.error_callback(goal_handle, -100, 'hardware failed to start trajectory')
@@ -324,7 +337,9 @@ class JointTrajectoryAction(Node):
                 self._update_trajectory_dynamixel()
                 self._update_trajectory_non_dynamixel()
 
-                print(f"lift motor status waypoint state {lift_traj_man.motor.status['waypoint_traj']['state']}")
+                # print(f"lift motor status waypoint state {lift_traj_man.motor.status['waypoint_traj']['state']}")
+                # print(f"Arm motor status waypoint state {arm_traj_man.motor.status['waypoint_traj']['state']}")
+                print(f"base rightwheel traj state {base_traj_man.right_wheel.status['waypoint_traj']['state'] }")
 
                 self.feedback_callback(goal_handle, start_time=ts)
                 # self.action_server_rate.sleep()
@@ -333,10 +348,12 @@ class JointTrajectoryAction(Node):
             # is handed back to the executor to handle other callbacks while
             # sleeping. This requires enough threads in the executor to process
             # all callbacks we expect to fire in parallel.
-            time.sleep(0.1)
+            time.sleep(0.4)
             self.node.robot_mode_rwlock.release_read()
             self._update_trajectory_dynamixel()
             self._update_trajectory_non_dynamixel()
+            print(f"base rightwheel traj state after last update {base_traj_man.right_wheel.status['waypoint_traj']['state'] }")
+
             return self.success_callback(goal_handle, 'traj succeeded!')
         
         else:
