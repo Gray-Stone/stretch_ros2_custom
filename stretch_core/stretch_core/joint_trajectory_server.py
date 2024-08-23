@@ -62,6 +62,10 @@ class JointTrajectoryAction(Node):
         self.arm_cg = ArmCommandGroup(node=self.node)
         self.lift_cg = LiftCommandGroup(node=self.node)
         self.mobile_base_cg = MobileBaseCommandGroup(node=self.node)
+
+        # Speical hack to account for sagging
+        self.wrist_pitch_cg.acceptable_joint_error = 0.05
+
         self.command_groups = [self.arm_cg, self.lift_cg, self.mobile_base_cg, self.head_pan_cg,
                                self.head_tilt_cg, self.wrist_yaw_cg, self.wrist_pitch_cg, self.wrist_roll_cg, self.gripper_cg]
         self.command_groups = [cg for cg in self.command_groups if cg is not None]
@@ -163,7 +167,7 @@ class JointTrajectoryAction(Node):
                         self.node.robot.stop_trajectory()
                         return FollowJointTrajectory.Result()
 
-                self.node.get_logger().debug(("{0} joint_traj action: "
+                self.node.get_logger().info(("{0} joint_traj action: "
                                 "target point #{1} = <{2}>").format(self.node.node_name, pointi, point))
 
                 valid_goals = [c.set_goal(point, self.invalid_goal_callback, self.node.fail_out_of_range_goal)
