@@ -18,6 +18,8 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.duration import Duration
 
+# from rclpy.node import Node
+
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint
 
@@ -32,7 +34,7 @@ import stretch_body.lift , stretch_body.arm , stretch_body.base
 class JointTrajectoryAction(Node):
 
     def __init__(self, node, action_server_rate_hz):
-        self.node = node
+        self.node :Node = node
         self._goal_handle = None
         self._goal_lock = threading.Lock()
         self.server = ActionServer(self.node, FollowJointTrajectory, '/stretch_controller/follow_joint_trajectory',
@@ -41,11 +43,11 @@ class JointTrajectoryAction(Node):
                                    goal_callback=self.goal_cb,
                                    handle_accepted_callback=self.handle_accepted_cb,
                                    callback_group=ReentrantCallbackGroup())
-        
+
         self.debug_dir = Path(hu.get_stretch_directory('goals'))
         if not self.debug_dir.exists():
             self.debug_dir.mkdir()
-        
+
         # Position mode init
         self.head_pan_cg = HeadPanCommandGroup(node=self.node) \
             if 'head_pan' in self.node.robot.head.joints else None
@@ -64,7 +66,7 @@ class JointTrajectoryAction(Node):
         self.mobile_base_cg = MobileBaseCommandGroup(node=self.node)
 
         # Speical hack to account for sagging
-        self.wrist_pitch_cg.acceptable_joint_error = 0.05
+        self.wrist_pitch_cg.acceptable_joint_error = 0.07
 
         self.command_groups = [self.arm_cg, self.lift_cg, self.mobile_base_cg, self.head_pan_cg,
                                self.head_tilt_cg, self.wrist_yaw_cg, self.wrist_pitch_cg, self.wrist_roll_cg, self.gripper_cg]
@@ -106,7 +108,7 @@ class JointTrajectoryAction(Node):
 
         # Launch an asynch coroutine to execute the goal
         goal_handle.execute()
-    
+
     def execute_cb(self, goal_handle):
         # save goal to log directory
         goal = goal_handle.request
@@ -116,7 +118,7 @@ class JointTrajectoryAction(Node):
 
         # Register this goal's ID
         goal_id = self.latest_goal_id
-        
+
         with self.node.robot_stop_lock:
             # Escape stopped mode to execute trajectory
             self.node.stop_the_robot = False
@@ -127,7 +129,7 @@ class JointTrajectoryAction(Node):
         if self.node.robot_mode not in ['position', 'trajectory', 'navigation']:
             self.node.robot_mode_rwlock.release_read()
             return self.error_callback(goal_handle, FollowJointTrajectory.Result.INVALID_GOAL, "Cannot execute goals while in mode={0}".format(self.node.robot_mode))
-        
+
         if self.node.robot_mode in ['position','navigation']:
             # For now, ignore goal time and configuration tolerances.
             commanded_joint_names = goal.trajectory.joint_names
@@ -163,13 +165,17 @@ class JointTrajectoryAction(Node):
             # an error is detected or success is achieved.
             for pointi, point in enumerate(goal.trajectory.points):
                 if not goal_handle.is_active:
-                        self.node.get_logger().info('Goal aborted')
-                        self.node.robot.stop_trajectory()
-                        return FollowJointTrajectory.Result()
+                    self.node.get_logger().info('Goal aborted')
+                    self.node.robot.stop_trajectory()
+                    return FollowJointTrajectory.Result()
 
                 self.node.get_logger().info(("{0} joint_traj action: "
                                 "target point #{1} = <{2}>").format(self.node.node_name, pointi, point))
 
+
+                time_from_start =max(Duration(seconds = point.time_from_start.sec + 2,
+                                           nanoseconds = point.time_from_start.nanosec + int(0.1 * 1e9)), 
+                                           self.node.default_goal_timeout_duration)
                 valid_goals = [c.set_goal(point, self.invalid_goal_callback, self.node.fail_out_of_range_goal)
                             for c in self.command_groups]
                 if not all(valid_goals):
@@ -186,7 +192,7 @@ class JointTrajectoryAction(Node):
                 #We rely on stretch_driver to avoid two push_commands() from two threads that are close together in tie
                 if self.node.dirty_command:
                     self.node.robot.push_command()
-                    
+
                 for c in self.command_groups:
                     c.init_execution(self.node.robot, robot_status)
                 # self.node.robot.push_command() #Moved to an asynchronous call in stretch_driver
@@ -203,20 +209,20 @@ class JointTrajectoryAction(Node):
                         self.node.robot.stop_trajectory()
                         self.node.robot_mode_rwlock.release_read()
                         return FollowJointTrajectory.Result()
-                    
+
                     if goal_handle.is_cancel_requested:
                         goal_handle.canceled()
                         self.node.robot.stop_trajectory()
                         self.node.get_logger().info('Goal canceled')
                         self.node.robot_mode_rwlock.release_read()
                         return FollowJointTrajectory.Result()
-                    
-                    if (self.node.get_clock().now() - goal_start_time) > self.node.default_goal_timeout_duration:
+
+                    if (self.node.get_clock().now() - goal_start_time) > time_from_start:
                         err_str = ("Time to execute the current goal point = <{0}> exceeded the "
-                                "default_goal_timeout = {1}").format(point, self.node.default_goal_timeout_s)
+                                "default_goal_timeout = {1} , given = {2}").format(point, self.node.default_goal_timeout_s , time_from_start)
                         self.node.robot_mode_rwlock.release_read()
                         return self.error_callback(goal_handle, FollowJointTrajectory.Result.PATH_TOLERANCE_VIOLATED, err_str)
-                    
+
                     # Check if a premption request has been received.
                     with self.node.robot_stop_lock:
                         if self.node.stop_the_robot or goal_id != self.latest_goal_id:
@@ -253,7 +259,7 @@ class JointTrajectoryAction(Node):
                 self.node.robot.stop_trajectory()
                 return FollowJointTrajectory.Result()
             return self.success_callback(goal_handle, "Achieved all target points.")
-        
+
         elif self.node.robot_mode == 'trajectory':
             ''' Check trajectory start time:
             If start time in the past, only preserve points that are in the future and discard rest
@@ -272,7 +278,7 @@ class JointTrajectoryAction(Node):
                 self.node.get_logger().info("Trajectory mode does not currently allow execution of goal with start time in the past. Aborting execution.")
                 goal_handle.abort()
                 return FollowJointTrajectory.Result()
-            
+
             # pre-process
             try:
                 goal.trajectory = hm.merge_arm_joints(goal.trajectory)
@@ -359,7 +365,7 @@ class JointTrajectoryAction(Node):
             print(f"base rightwheel traj state after last update {base_traj_man.right_wheel.status['waypoint_traj']['state'] }")
 
             return self.success_callback(goal_handle, 'traj succeeded!')
-        
+
         else:
             self.node.robot_mode_rwlock.release_read()
             return self.error_callback(goal_handle, -100, 'Joint Trajectory Server only accepts goals in position or trajectory mode')
@@ -367,13 +373,13 @@ class JointTrajectoryAction(Node):
 
     def contact_detected_callback(self, err_str):
         self.node.get_logger().warn(err_str)
-    
+
     def invalid_joints_callback(self, err_str):
         self.node.get_logger().warn(err_str)
-    
+
     def invalid_goal_callback(self, err_str):
         self.node.get_logger().warn(err_str)
-    
+
     def error_callback(self, goal_handle, error_code, error_str):
         print("-------------------------------------------")
         print("Errored goal")
@@ -448,7 +454,7 @@ class JointTrajectoryAction(Node):
                 actual_pos = joint.get_position()
 
             feedback.multi_dof_joint_names = goal.multi_dof_trajectory.joint_names
-        
+
         feedback.joint_names = commanded_joint_names
         feedback.header.stamp = self.node.get_clock().now().to_msg()
         goal_handle.publish_feedback(feedback)
